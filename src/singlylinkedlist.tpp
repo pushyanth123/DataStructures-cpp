@@ -4,8 +4,33 @@
  * @brief This file contains the definitions of SinglyLinkedList data structure
  */
 
-
 #include "../include/singlylinkedlist.hpp"
+#include <functional>
+
+using ds::SinglyLinkedList;
+using ds::SlNode;
+using std::ostream;
+
+namespace ds
+{
+    template <typename T>
+    ostream &operator<<(ostream &os, const SinglyLinkedList<T> &list)
+    {
+        using std::ostream;
+        if (list.head == nullptr)
+            return os << "{}";
+
+        os << "{ ";
+        SlNode<T> *temp = list.head;
+        while (temp->next != nullptr)
+        {
+            os << temp->data << ", ";
+            temp = temp->next;
+        }
+        os << temp->data << " }";
+        return os;
+    }
+}
 
 inline void index_out_of_range_exception(int _actual_index, int _max_index)
 {
@@ -35,43 +60,26 @@ SinglyLinkedList<T>::SinglyLinkedList(const T &data)
 template <typename T>
 SinglyLinkedList<T>::SinglyLinkedList(const SinglyLinkedList<T> &other)
 {
-    // If other list is empty, return
-    if (other.head == nullptr)
-        return;
+    this->head = nullptr;
+    this->_size = 0;
 
-    this->head = new SlNode<T>;
-    SlNode<T> *__other_ptr = other.head;
-    SlNode<T> *__this_ptr = this->head;
-
-    // Copy all nodes into the list
-    while (__other_ptr->next != nullptr)
-    {
-        __this_ptr->data = __other_ptr->data;
-        __this_ptr->next = new SlNode<T>;
-        __this_ptr = __this_ptr->next;
-        __other_ptr = __other_ptr->next;
-    }
-
-    __this_ptr->data = __other_ptr->data;
-
-    // Set the size
-    this->_size = other._size;
+    *this = other; // Call the copy assignment operator
 }
 
 // Move constructor
 template <typename T>
 SinglyLinkedList<T>::SinglyLinkedList(SinglyLinkedList<T> &&other) noexcept
-    : head(other.head)
+    : head(other.head), _size(other._size)
 {
     other.head = nullptr;
+    other._size = 0;
 }
 
 // Initializer list constructor
 template <typename T>
 SinglyLinkedList<T>::SinglyLinkedList(const std::initializer_list<T> &list)
 {
-    // If list is empty, return
-    if (list.size() == 0)
+    if (list.size() == 0) // If list is empty, return
         return;
 
     this->head = new SlNode<T>;
@@ -88,45 +96,42 @@ SinglyLinkedList<T>::SinglyLinkedList(const std::initializer_list<T> &list)
         __this_ptr = __this_ptr->next;
     }
 
-    _size = list.size();
+    this->_size = list.size();
 }
 
 // Destructor
 template <typename T>
 SinglyLinkedList<T>::~SinglyLinkedList()
 {
-    if (this->head == nullptr)
+    if (this->head == nullptr) // Return if list is empty
         return;
 
-    if (this->head->next == nullptr)
+    SlNode<T> *__temp = this->head;
+    while (__temp != nullptr)
     {
-        delete this->head;
-        return;
+        SlNode<T> *next = __temp->next;
+        delete __temp;
+        __temp = next;
     }
 
-    // Delete all nodes
-    SlNode<T> *__next_ptr;
-    while (head != nullptr)
-    {
-        __next_ptr = head->next;
-        delete head;
-        head = __next_ptr;
-    }
+    this->head = nullptr;
+    this->_size = 0;
 }
 
 // Copy assignment operator
 template <typename T>
 SinglyLinkedList<T> &SinglyLinkedList<T>::operator=(const SinglyLinkedList<T> &other)
 {
-    // First delete all existing data in the singly linked list
-    delete this->head;
-
-    // If other list is empty, return
-    if (other.head == nullptr)
+    // If other list is empty or both operator lists are same, return
+    if (other.head == nullptr || this == &other)
         return *this;
 
-    // TODO: Complete rest. (Call copy constructor)
+    // Delete existing data if the list is not empty
+    if (this->head != nullptr)
+        this->~SinglyLinkedList();
 
+    this->head = other.head->copy();
+    this->_size = other._size; // Copy the size
     return *this;
 }
 
@@ -134,32 +139,25 @@ SinglyLinkedList<T> &SinglyLinkedList<T>::operator=(const SinglyLinkedList<T> &o
 template <typename T>
 SinglyLinkedList<T> &SinglyLinkedList<T>::operator=(SinglyLinkedList<T> &&other) noexcept
 {
-    // First delete all existing data in the singly linked list
-    delete this->head;
+    // Check if the list is not empty
+    if (this->head != nullptr)
+        this->~SinglyLinkedList(); // Call destructor
 
-    // Call move constructor
-    this->head = other.head;
-    other.head = nullptr;
+    // Call swap function
+    std::swap(this->head, other.head);
+    std::swap(this->_size, other._size);
 
     return *this;
 }
 
-// Overload [] operator to get and set data
+// Overload [] operator (get and set)
 template <typename T>
 T &SinglyLinkedList<T>::operator[](size_t index)
 {
-    // Check if index is out of bounds
-    if (index < 0 or index >= _size)
-        index_out_of_range_exception(index, _size - 1);
-
-    SlNode<T> *temp = this->head;
-    while (index--)
-        temp = temp->next;
-
-    return temp->data;
+    return this->at(index)->data;
 }
 
-// Overload [] operator get only
+// Overload [] operator (get only)
 template <typename T>
 T &SinglyLinkedList<T>::operator[](size_t index) const
 {
@@ -176,7 +174,7 @@ bool SinglyLinkedList<T>::operator==(const SinglyLinkedList<T> &other) const
         return false;
 
     // If both are not empty, call SlNode's == operator
-    return this->head->operator==(other.head);
+    return *this->head == *other.head;
 }
 
 // Overload "!=" operator to check if two lists are not equal
@@ -187,11 +185,10 @@ bool SinglyLinkedList<T>::operator!=(const SinglyLinkedList<T> &other) const
 }
 
 // Overload "+" operator to concatenate two lists
-// TODO: Not working properly
 template <typename T>
 SinglyLinkedList<T> SinglyLinkedList<T>::operator+(const SinglyLinkedList<T> &other) const
 {
-    // If either list is empty, return the other list
+    // If either list is empty, return the other list (it won't copy the data)
     if (this->head == nullptr)
         return other;
     if (other.head == nullptr)
@@ -199,37 +196,19 @@ SinglyLinkedList<T> SinglyLinkedList<T>::operator+(const SinglyLinkedList<T> &ot
 
     // Call copy constructor
     SinglyLinkedList<T> result(*this);
-    SinglyLinkedList<T> __temp(other);
 
-    // Append all nodes from the second list
-    SlNode<T> *__this_ptr = result.head;
-
-    // Go to last node
-    while (__this_ptr->next != nullptr)
-        __this_ptr = __this_ptr->next;
-
-    __this_ptr->next = __temp.head;
-    result._size += other.size();
-
-    return result;
+    return result.operator+=(other); // Call += operator
 }
 
-// Overload "<<" operator to print the list
+// Overload "+=" operator to concatenate two lists
 template <typename T>
-ostream &operator<<(ostream &os, const SinglyLinkedList<T> &list)
+SinglyLinkedList<T> &SinglyLinkedList<T>::operator+=(const SinglyLinkedList<T> &other)
 {
-    if (list.head == nullptr)
-        return os << "List is empty";
+    SlNode<T> *__this_ptr = this->at(this->size() - 1);
+    __this_ptr->next = other.head->copy(); // Copy the other list
+    this->_size += other.size();           // Update size
 
-    os << "{ ";
-    SlNode<T> *temp = list.head;
-    while (temp->next != nullptr)
-    {
-        os << temp->data << ", ";
-        temp = temp->next;
-    }
-    os << temp->data << " }";
-    return os;
+    return *this;
 }
 
 // Function to get the size of the list
@@ -239,78 +218,59 @@ size_t SinglyLinkedList<T>::size() const
     return _size;
 }
 
+// Return pointer to the node at the index
+template <typename T>
+inline SlNode<T> *SinglyLinkedList<T>::at(size_t _index) const
+{
+    SlNode<T> *_temp = this->head;
+    while (_index--)
+        _temp = _temp->next;
+
+    return _temp;
+}
+
 // Function to insert data at front of the list
 template <typename T>
-void SinglyLinkedList<T>::insert(const T &data)
+void SinglyLinkedList<T>::push_front(const T data)
 {
     // Create a new SlNode
-    SlNode<T> *temp = new SlNode<T>(data);
-    temp->next = head;
+    SlNode<T> *_temp = new SlNode<T>(data);
+    _temp->next = this->head;
 
-    head = temp; // Update the head pointer
-    _size += 1;  // Increment the size of list
+    this->head = _temp; // Update the head pointer
+    _size += 1;         // Increment the size of list
 }
 
 // Function to insert data at the end of the list
 template <typename T>
-void SinglyLinkedList<T>::insert_end(const T &data)
+void SinglyLinkedList<T>::push_back(const T data)
 {
-    // If the list is empty insert at head
-    if (head == nullptr)
-    {
-        head = new SlNode<T>(data);
-        _size += 1;
-        return;
-    }
-
-    // Iterate to the end of the list
-    SlNode<T> *temp = head;
-    while (temp->next != nullptr)
-        temp = temp->next;
-
-    // Add the new node at the end
+    SlNode<T> *temp = (this->head == nullptr) ? (head = new SlNode<T>(data)) : this->at(this->_size - 1);
     temp->next = new SlNode<T>(data);
-    _size += 1;
+    this->_size += 1;
 }
 
 // Function to insert data at given index
 template <typename T>
-void SinglyLinkedList<T>::insert_at(size_t index, T &data)
+void SinglyLinkedList<T>::push_at(size_t index, T data)
 {
-    // Check if the index is valid
-    if (index < 0 or index >= this->_size)
-        index_out_of_range_exception(index, _size - 1);
-
-    // If the index is 0, call insert function
     if (index == 0)
+        this->push_front(data); // Insert at front if index is 0
+    else if (index <= this->_size - 1)
     {
-        this->insert(data);
-        return;
+        SlNode<T> *temp = this->at(index - 1); // Get the node before the index
+        SlNode<T> *__next = temp->next;        // Get the node after the index
+        temp->next = new SlNode<T>(data);      // Create a new node
+        temp->next->next = __next;             // Update the next pointer
+        _size += 1;
     }
-    else if (index == _size - 1)
-    {
-        this->push_back(data);
-        return;
-    }
-
-    // Create a new SlNode
-    SlNode<T> *temp = new SlNode<T>(data);
-
-    // Iterate through the list to reach the index
-    SlNode<T> *__itr = this->head;
-    while (index--)
-        __itr = __itr->next;
-
-    // Update the pointers
-    temp->next = __itr->next;
-    __itr->next = temp;
-
-    _size++; // Increment the size of the list
+    else
+        index_out_of_range_exception(index, (this->_size == 0) ? 0 : this->_size - 1);
 }
 
-// Function to remove data head of the list
+// Function to remove data at head of the list
 template <typename T>
-T SinglyLinkedList<T>::pop()
+T SinglyLinkedList<T>::pop_front()
 {
     // Check if the list is empty
     if (head == nullptr)
@@ -333,49 +293,53 @@ T SinglyLinkedList<T>::pop_back()
     if (head == nullptr)
         throw std::out_of_range("List is empty");
 
-    // If the list has only one node, call pop function
+    // If the list has only one node, call pop front
     if (head->next == nullptr)
-        return this->pop();
+        return this->pop_front();
 
-    // Iterate through the list to reach the end
-    SlNode<T> *__itr = this->head;
-    while (__itr->next->next != nullptr)
-        __itr = __itr->next;
-
-    T data = __itr->next->data; // Store the data to be returned
-    delete __itr->next;         // Delete the last node
-    __itr->next = nullptr;      // Update the last node pointer
-    _size--;                    // Decrement the size of the list
+    SlNode<T> *__itr = this->at(this->size() - 2), *temp = __itr->next;
+    T data = __itr->next->data;
+    __itr->next = nullptr, this->_size--;
+    delete temp;
 
     return data;
 }
 
 // Function to remove data at given index
 template <typename T>
-T SinglyLinkedList<T>::remove_at(size_t index)
+T SinglyLinkedList<T>::pop_at(size_t index)
 {
-    // Check if the index is valid
-    if (index < 0 or index >= _size)
-        index_out_of_range_exception(index, _size - 1);
-
-    // If index == 0, call pop
     if (index == 0)
-        return this->pop();
-    else if (index == _size)
-        return this->pop_back();
+        return this->pop_front(); // If index is 0, call pop_front function
+    else if (index < this->_size)
+    {
+        SlNode<T> *__itr = this->at(index - 1), *_tmp = __itr->next->next;
+        T data = _tmp->next->data;
+        delete __itr->next;
+        __itr->next = _tmp, this->_size--;
+        return data;
+    }
+    else if (this->_size == 0)
+        throw std::out_of_range("List is empty");
+    else
+        index_out_of_range_exception(index, (this->_size == 0) ? 0 : this->_size - 1);
+}
 
-    // Iterate through the list to reach the index
-    SlNode<T> *__itr = this->head;
-    while (--index)
-        __itr = __itr->next;
-
-    T data = __itr->next->data;      // Store the data to be returned
-    SlNode<T> *temp = __itr->next;   // Store the node to be deleted
-    __itr->next = __itr->next->next; // Update the node pointer
-    delete temp;                     // Delete the old node
-    _size--;                         // Decrement the size of the list
-
-    return data;
+// Function to delete data at given index (without returning it)
+template <typename T>
+void SinglyLinkedList<T>::delete_at(size_t index)
+{
+    if (index == 0)
+        this->pop_front(); // If index is 0, call pop_front function
+    else if (index < this->_size)
+    {
+        SlNode<T> *__itr = this->at(index - 1), *_tmp = __itr->next->next;
+        delete __itr->next;
+        __itr->next = _tmp;
+        this->_size--;
+    }
+    else
+        (this->_size == 0) ? throw std::out_of_range("List is empty") : index_out_of_range_exception(index, (this->_size == 0) ? 0 : this->_size - 1);
 }
 
 // Function to clear the list (set all data to nullptr)
@@ -397,7 +361,7 @@ void SinglyLinkedList<T>::clear()
 
 // Function to check if the list is empty
 template <typename T>
-bool SinglyLinkedList<T>::is_empty() const
+bool SinglyLinkedList<T>::empty() const
 {
     return head == nullptr;
 }
@@ -408,19 +372,17 @@ size_t SinglyLinkedList<T>::find(const T &data) const
 {
     // Iterate through the list to find the data
     SlNode<T> *__itr = this->head;
-    size_t index = 0;
-    while (__itr->next != nullptr)
+    for (size_t i = 0; __itr != nullptr; i++)
     {
         if (__itr->data == data)
-            return index;
-        __itr = __itr->next;
-        index++;
-    }
+            return i;
 
+        __itr = __itr->next;
+    }
     return -1; // If the element is not found
 }
 
-// Function to check if the list contains data
+// Function to check if the list contains given data
 template <typename T>
 bool SinglyLinkedList<T>::contains(const T &data) const
 {
@@ -436,7 +398,6 @@ void SinglyLinkedList<T>::reverse()
         return;
 
     // Iterate through the list and reverse the pointers
-    // TODO: Need better understanding of this
     SlNode<T> *__itr = this->head;
     SlNode<T> *prev = nullptr;
     SlNode<T> *next;
@@ -454,7 +415,49 @@ void SinglyLinkedList<T>::reverse()
 
 // Method to sort the singly linked list Change pointers instead of data
 template <typename T>
-void SinglyLinkedList<T>::sort() {
+void SinglyLinkedList<T>::sort()
+{
     // TODO: Implement the program to sort the singly linked list
+}
 
+// Method to erase the given data from the list
+template <typename T>
+void SinglyLinkedList<T>::erase(const T &data)
+{
+    if (head == nullptr)
+        return;
+
+    if (head->data == data)
+        this->pop_front();
+
+    for (SlNode<T> *__itr = this->head, *__temp; __itr->next != nullptr; __itr = __itr->next)
+    {
+        if (__itr->next->data == data)
+        {
+            __temp = __itr->next;
+            __itr->next = __temp->next;
+            delete __temp;
+            this->_size--;
+        }
+    }
+}
+
+// Method replace the given data with the new data
+template <typename T>
+void SinglyLinkedList<T>::replace(const T &data, const T &new_data)
+{
+    for (SlNode<T> *__itr = this->head; __itr != nullptr; __itr = __itr->next)
+    {
+        if (__itr->data == data)
+            __itr->data = new_data;
+    }
+}
+
+// Implement function on each node in the list
+template <typename T>
+template <typename... Args>
+void SinglyLinkedList<T>::for_each(void (*func)(SlNode<T> *, Args...), Args... args)
+{
+    for (SlNode<T> *__itr = this->head; __itr != nullptr; __itr = __itr->next)
+        func(__itr, args...);
 }
